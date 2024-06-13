@@ -63,11 +63,15 @@ Main script responsible for executing backup and synchronization tasks.
 
 ### create_task.py
 
-Utility script for creating new backup tasks in the `tasks` directory.
+Utility script for creating new backup tasks in the tasks directory.
+
+#### Features:
+- Interactively create new backup task configuration files (*.json) for use with `backup.py`.
+- Facilitates the generation and uploading of SSH keys to the server from which data will be backed up.
 
 #### Usage:
+Run `python create_task.py` to interactively create a new backup task configuration file (*.json) in the tasks directory.
 
-Run `python create_task.py` to interactively create a new backup task configuration file (`*.json`) in the `tasks` directory.
 
 ---
 
