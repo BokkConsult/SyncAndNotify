@@ -6,6 +6,7 @@ import argparse
 import subprocess
 import urllib.request
 import urllib.error
+import time
 from datetime import datetime
 from queue import Queue
 
@@ -98,48 +99,61 @@ def send_error_mail(error_message, json_filename, fail_log_path, start_time, end
 
 def synchronize_folders(server_address, port, username, private_key_path, remote_folder_path,
                         local_folder_path, json_filename, delete_remote_files, config):
-    success = True
+    attempts = 0
+    max_attempts = 5
+    wait_time = 30
+    success = False
     rsync_output = ""
     error_message = None
     start_time = datetime.now()
     log_file_name = f"logfile_{json_filename}_{start_time.strftime('%Y%m%d_%H%M%S')}.log"
     log_file_path = os.path.join(LOG_DIR, log_file_name)
 
-    try:
-        if not remote_folder_path or not local_folder_path:
-            raise ValueError("Remote or local folder path is empty.")
+    while attempts < max_attempts and not success:
+        try:
+            if not remote_folder_path or not local_folder_path:
+                raise ValueError("Remote or local folder path is empty.")
+            
+            remote = f"{username}@{server_address}:{remote_folder_path}"
+            ssh_command = f"ssh -i {private_key_path} -p {port}"
+            rsync_command = ["rsync", "-avz", "--checksum", "--partial", "-e", ssh_command, remote, local_folder_path]
 
-        remote = f"{username}@{server_address}:{remote_folder_path}"
-        ssh_command = f"ssh -i {private_key_path} -p {port}"
-        rsync_command = ["rsync", "-avz", "--checksum", "--partial", "-e", ssh_command, remote, local_folder_path]
+            if delete_remote_files:
+                rsync_command.insert(4, "--delete")
+            
+            print("Running rsync command:", " ".join(rsync_command))  # Debugging output
 
-        if delete_remote_files:
-            rsync_command.insert(4, "--delete")
-        
-        print("Running rsync command:", " ".join(rsync_command))  # Debugging output
+            result = subprocess.run(rsync_command, capture_output=True, text=True)
+            rsync_output = result.stdout
 
-        result = subprocess.run(rsync_command, capture_output=True, text=True)
-        rsync_output = result.stdout
-
-        if result.returncode != 0:
-            success = False
-            error_message = f"Error during synchronization with rsync: {result.stderr}"
+            if result.returncode == 0:
+                success = True
+                print(f"Files were synchronized between '{remote_folder_path}' and '{local_folder_path}'")
+            else:
+                error_message = f"Error during synchronization with rsync: {result.stderr}"
+                print(error_message)
+                log_error(error_message, json_filename)
+                attempts += 1
+                if attempts < max_attempts:
+                    print(f"Retrying in {wait_time} seconds... (Attempt {attempts} of {max_attempts})")
+                    time.sleep(wait_time)
+        except Exception as e:
+            error_message = f"Error during synchronization between {server_address}:{port}: {str(e)}"
             print(error_message)
             log_error(error_message, json_filename)
-        
-        print(f"Files were synchronized between '{remote_folder_path}' and '{local_folder_path}'")
-    except Exception as e:
-        success = False
-        error_message = f"Error during synchronization between {server_address}:{port}: {str(e)}"
-        print(error_message)
-        log_error(error_message, json_filename)
+            attempts += 1
+            if attempts < max_attempts:
+                print(f"Retrying in {wait_time} seconds... (Attempt {attempts} of {max_attempts})")
+                time.sleep(wait_time)
     
     end_time = datetime.now()
     log_file_path = log_sync_result(username, json_filename, success, rsync_output, start_time)
     
     if not success:
-        # Move send_error_mail() call here to ensure log file is fully written before sending mail
         send_error_mail(error_message, json_filename, log_file_path, start_time, end_time, username, server_address, port, remote_folder_path, local_folder_path)
+    
+    return success
+
 
 
 
