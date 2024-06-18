@@ -7,6 +7,7 @@ import subprocess
 import urllib.request
 import urllib.error
 import time
+import pexpect
 from datetime import datetime
 from queue import Queue
 
@@ -116,21 +117,37 @@ def synchronize_folders(server_address, port, username, private_key_path, remote
             
             remote = f"{username}@{server_address}:{remote_folder_path}"
             ssh_command = f"ssh -i {private_key_path} -p {port}"
-            rsync_command = ["rsync", "-avz", "--checksum", "--partial", "-e", ssh_command, remote, local_folder_path]
+            rsync_command = f"rsync -avz --checksum --partial -e '{ssh_command}' {remote} {local_folder_path}"
 
             if delete_remote_files:
-                rsync_command.insert(4, "--delete")
+                rsync_command = rsync_command.replace("--partial", "--partial --delete")
             
-            print("Running rsync command:", " ".join(rsync_command))  # Debugging output
+            print("Running rsync command:", rsync_command)  # Debugging output
 
-            result = subprocess.run(rsync_command, capture_output=True, text=True)
-            rsync_output = result.stdout
-
-            if result.returncode == 0:
-                success = True
-                print(f"Files were synchronized between '{remote_folder_path}' and '{local_folder_path}'")
-            else:
-                error_message = f"Error during synchronization with rsync: {result.stderr}"
+            child = pexpect.spawn(rsync_command)
+            i = child.expect([pexpect.EOF, "password:", pexpect.TIMEOUT], timeout=None)  # Ingen timeout her
+            
+            if i == 1:  # Password prompt
+                error_message = "Password prompt detected. Likely due to incorrect username or SSH key."
+                print(error_message)
+                log_error(error_message, json_filename)
+                break  # Exit the loop and do not retry
+            elif i == 0:  # EOF
+                child.close()
+                if child.exitstatus == 0:
+                    success = True
+                    rsync_output = child.before.decode()  # Capture rsync output
+                    print(f"Files were synchronized between '{remote_folder_path}' and '{local_folder_path}'")
+                else:
+                    error_message = f"Error during synchronization with rsync: {child.before.decode()}"
+                    print(error_message)
+                    log_error(error_message, json_filename)
+                    attempts += 1
+                    if attempts < max_attempts:
+                        print(f"Retrying in {wait_time} seconds... (Attempt {attempts} of {max_attempts})")
+                        time.sleep(wait_time)
+            elif i == 2:  # Timeout
+                error_message = "Error: rsync command timed out."
                 print(error_message)
                 log_error(error_message, json_filename)
                 attempts += 1
@@ -153,9 +170,6 @@ def synchronize_folders(server_address, port, username, private_key_path, remote
         send_error_mail(error_message, json_filename, log_file_path, start_time, end_time, username, server_address, port, remote_folder_path, local_folder_path)
     
     return success
-
-
-
 
 def worker(queue, config):
     while not queue.empty():
