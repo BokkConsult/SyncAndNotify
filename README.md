@@ -29,9 +29,9 @@ This will install all the necessary Python modules listed in requirements.txt. I
 ### Configuration
 
 - **Initial Setup:** Run `python deploy.py` to initialize configurations and directories.
-- **Backup Configuration:** Use `python backup.py --createconfig` to configure backup settings.
+- **Backup Configuration:** Use `python backup.py --createconfig` to re-configure backup settings if needed after initial config.
 - **Task Creation:** Employ `python create_task.py` to define new backup tasks.
-- **Email Setup:** Configure email settings using `python mail_sender.py --createconfig`.
+- **Email Setup:** re-Configure email settings using `python mail_sender.py --createconfig` if needed after initial config.
 
 ### deploy.py
 
