@@ -10,3 +10,4 @@ socket
 subprocess
 threading
 urllib
+pexpect
